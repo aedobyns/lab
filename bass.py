@@ -130,7 +130,7 @@ def load_wrapper(Data, Settings):
     Plain calls a simple .txt file and is intended to be more general purpose
     Parameters
     ----------
-    Data : dictionary
+    Data: dictionary
         dictionary containing the pandas dataframes that store the data.
     Settings: dictionary
         dictionary that contains the user's settings.
@@ -1717,13 +1717,19 @@ def average_measurement_plot(event_type, meas, Results):
     meas: string
         A string that specifies which measurement type to use for the figure.
     Results: dictionary
-        The dictionary that contains all of the results 
+        The dictionary that contains all of the results. this function uses either Results['Peaks Grouped'] or Results['Bursts Grouped'].
     Returns
     -------
     none
     Notes
     -----
-    Displays the figure. does not automatically safe out or return the figure object.
+    Displays the figure. does not automatically save out or return the figure object.
+    Examples
+    -----
+    event_type = 'Peaks'
+    meas = 'Peaks Amplitude'
+    histent_wrapper(event_type, meas, Settings, Results)
+    Results['Histogram Entropy']
     """
     
     if event_type.lower() == 'peaks':
@@ -2075,6 +2081,10 @@ def histent(data_list):
     if all of the samples fall in one bin regardless of the bin size
     means we have the most predictable sitution and the entropy is 0
     if we have uniformly dist function, the max entropy will be 1
+    References
+    -----
+    Thanks to Farina and Irene for the code that this was based on.
+    <Get Link or Reference>
     """ 
     NumBin = int(2 * (log(len(data_list), 2)))
     binarray = np.linspace(min(data_list), max(data_list), NumBin)
@@ -2098,6 +2108,42 @@ def histent(data_list):
     return HistEntropy, binarray
 
 def histent_wrapper(event_type, meas, Settings, Results):
+    """
+    Wrapper to handle varibles in and out of histent() correctly. Takes two additional parameters
+    that dictate which measurement will be executed.
+    Parameters
+    ----------
+    event_type: string
+        A string that should be either 'Peaks' or 'Bursts', which will tell the function 
+        which results to pull the measurement from.
+    meas: string
+        A string that specifies which measurement type to use for the figure.
+    Settings: dictionary
+
+    Results: dictionary
+        The dictionary that contains all of the results. Results['Peaks'] and/or Results['Bursts']
+        is used.
+    Returns
+    -------
+    Results: dictionary
+        The dictionary that contains all of the results. Results['Histogram Entropy'], a dataframe
+        is created or added to.
+    Notes
+    -----
+    A histogram is generated as well, and is saved directly to the plots folder stored in Settings['plots folder'].
+    There is only one histogram entropy Dataframe, which is updated for each iteration of this function. It is 
+    displayed and saved out automatically to Settings['output folder'].
+    This function breaks the general rule of 'Three arguments in, Three arguments out.' Mostly because the 'event_type'
+    and 'meas' are ment to be temporary varibles anyways. Saving them out doesn't make much sense.
+
+    See histent for more information about what Histogram Entropy is.
+    Examples
+    --------
+    event_type = 'Peaks'
+    meas = 'Peaks Amplitude'
+    histent_wrapper(event_type, meas, Settings, Results)
+    Results['Histogram Entropy']
+    """
     
     if 'Histogram Entropy' not in Results.keys():
         Results['Histogram Entropy'] = DataFrame(index = Data['original'].columns)
