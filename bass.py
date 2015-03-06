@@ -14,96 +14,17 @@ from matplotlib.widgets import *
 import datetime
 from matplotlib import cbook
 from scipy.signal import butter, lfilter
+from __future__ import division
 from math import log
 from scipy.stats.stats import pearsonr
+from PIL import Image
 #
 #Upload
 #Data and Settings. 
 #
-def mkdir_p(path):
-    '''
-    This function creates a folder at the end of the specified path, unless the folder already exsists. 
-    '''
-    try:
-        os.makedirs(path)
-    except OSError as exc: # Python >2.5
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else: raise
-            
-def load_data():
-    '''
-    this function loads in the data file, which should be a single wave in a tab seperated text file with no header.
-    '''
-    load_path = raw_input("Full File Path for data input: ")
-    path = raw_input("Full File Path for data output: ")
 
-    if path[-1] == '/':
-        path = path[:-1]
-
-    folder = raw_input("Sample Name: ")
-    #rate = float(raw_input("Sample rate in seconds/frame: "))
-
-    time, data = np.loadtxt(load_path, delimiter="\t", usecols=(0,1),  unpack=True)
-    mkdir_p(path+'/'+folder)
-    rate = time[1] - time[0] #changed so that there isn't a prompt for it
-
-    Settings = {'Uploaded File Location':load_path, 'Save Location':path, 
-                'Sample Folder':folder, 'Sample Rate (s/frame)':rate} 
-    #this is the object that will contain all information about the analysis that was performed. it is saved out as a CSV later. 
-    #A new one is initialized everytime the data is loaded in.
-
-    Data = {'original':Series(data = data, index = time)}
-    Results = {} #make this here to clean all old results
-
-    print 'Sample',folder, 'is', (time[-1]-time[0]), 'seconds long'
-    return Data, Settings, Results
-
-def string_eval(string):
-    try:
-        num = float(string)
-        return num
-    except ValueError:
-        return string
-
-def load_settings(Settings):
-    '''
-    '''
-    from ast import literal_eval
-    load_set_path = raw_input("Full File Path for Settings file: ")
-    
-    settings_temp = pd.read_csv(load_set_path, index_col=0, header=0)
-    exclusion_list = ['Uploaded File Location', 'Sample Folder', 
-                      'Sample Rate (s/frame)', 'Save Location', 
-                      'Baseline', 'Baseline-Rolling', 'Settings File']
-    settings_temp = settings_temp.ix[:,0]
-    for key, val in settings_temp.iteritems():
-        
-        if key in exclusion_list:
-            continue
-        else:
-            #print key, val
-            Settings[key] = string_eval(val)
-            
-            if val == 'True':
-                Settings[key] = True
-            if val == 'False':
-                Settings[key] = False
-                
-    Settings['Settings File'] = load_set_path
-    return Settings
-
-def display_settings(Settings):
-    '''
-    '''
-    Settings_copy = Settings.copy()
-    
-    if 'Baseline-Rolling' in Settings_copy.keys():
-        Settings_copy['Baseline-Rolling'] = True
-    Settings_copy = DataFrame.from_dict(Settings_copy, orient='index')
-    Settings_copy.columns = ['Value']
-    Settings_copy = Settings_copy.sort()
-    return Settings_copy
+###
+#
 #LCPro Load Block
 ###
 
@@ -200,7 +121,226 @@ def get_events(data, roi_param):
         events_y[key].append(roi_events.iloc[i,1]) #use the name to add the event's amplitude data point to the dict
         
     return events_x, events_y #return the two dictionaries
+
+def load_wrapper(Data, Settings):
+    """
+    Wrapper that chooses the correct script to load in data files.
+    Currently, loads in files from LCPro, ImageJ, SIMA, and Morgan, which are all specalized
+    files exported by the CGW or SW labs. 
+    Plain calls a simple .txt file and is intended to be more general purpose
+    Parameters
+    ----------
+    Data : dictionary
+        dictionary containing the pandas dataframes that store the data.
+    Settings: dictionary
+        dictionary that contains the user's settings.
+    Returns
+    -------
+    Data : dictionary
+        dictionary containing the pandas dataframes that store the data.
+    Settings: dictionary
+        dictionary that contains the user's settings.
+    Notes
+    -----
+    Add new file loaders at the end of the function by setting up your own gate. 
+    """
     
+    #LCPro File extraction
+    if Settings['File Type'] == 'LCPro':
+
+        Data, Settings, Results = load_RAAIM(Data, Settings, Results)
+        events_x, events_y = get_events(Data['original'], Data['ROI parameters'])
+        Data['ROI parameters']['Start time (s)'] = Data['ROI parameters']['Time(s)'] - Data['ROI parameters']['attack(s)']
+        Data['ROI parameters']['End time (s)'] = Data['ROI parameters']['Time(s)'] + Data['ROI parameters']['decay(s)']
+        new_index = [] #create a new, empty list
+
+        for i in np.arange(len(Data['ROI parameters'].index)): #for each index in the original roi_param list, will include duplicates
+            new_index.append('Roi'+str(Data['ROI parameters'].index[i])) #reformat name and append it to the empty index list
+        Data['ROI parameters'].index = new_index
+        Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
+        print 'Data Loaded'
+
+    #ImageJ
+    elif Settings['File Type'] == 'ImageJ':
+        Data['original'] = pd.read_csv(r'%s/%s_ROI.csv' %(Settings['folder'],Settings['Label']), 
+                                       index_col= 'time(s)', sep=',') #load the intensity time series for each roi. should be a text file named exactly 'ROI normalized.txt'
+        print "Loaded time series."
+
+        roi_param = pd.read_csv(r'%s/%s_ROI_loc.csv' %(Settings['folder'],Settings['Label']), 
+                                index_col=0, sep='\t')#load the parameter list.
+        print "Loaded Centroids."
+
+        Data['ROI parameters'] = roi_param
+        im = Image.open(r'%s/%s_MaxIntensity.png' %(Settings['folder'], 
+                                                    Settings['Label'])) #MUST BE RBG and .png. seriously, I'm not kidding.
+        print "Loaded 'rbg.png'"
+
+        new_index = [] #make an empty temp list
+        for i in np.arange(len(roi_param.index)): #for each index in roi_loc
+            new_index.append('Mean'+str(roi_param.index[i])) #make a string from the index name in the same format as the data
+        Data['ROI parameters'].index = new_index
+
+        print 'roi_loc parsed'
+
+        Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
+        Settings['Graph LCpro events'] = False
+        print 'Data Loaded'
+
+        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
+        print "Made plots folder"
+
+    #SIMA
+    elif Settings['File Type'] == 'SIMA':
+        data = pd.read_csv(r'%s' %Settings['folder'], sep = '\t')
+        del data['sequence']
+        data = data.ix[2:]
+        data.index = np.arange(len(data))
+        del data['frame']
+        Data['original'] = data
+        Settings['Graph LCpro events'] = False
+        Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
+        print 'Data Loaded'
+
+        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
+        print "Made plots folder"
+
+    #Plain text, no headers, col[0] is time in seconds
+    elif Settings['File Type'] == 'Plain':
+        data = pd.read_csv(r'%s/%s' %(Settings['folder'],Settings['Label']), sep = '\t', 
+                           index_col= 0, header=None)
+        data.index.name = 'Time(s)'
+
+        new_cols = []
+
+        for i in np.arange(len(data.columns)):
+            new_cols.append('Mean'+str(data.columns[i]))
+        data.columns = new_cols
+
+        Data['original'] = data
+        print 'Data Loaded'
+        Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
+        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
+        print "Made plots folder"
+
+    elif Settings['File Type'] == 'Morgan':
+        data = pd.read_csv(r'%s/%s' %(Settings['folder'],Settings['Label']), sep = ',', 
+                           index_col= 0)
+        data.index.name = 'Time(s)'
+
+        #Old morgan data in milliseconds
+        new_index = []
+        for i in data.index:
+            i = round(i, 4)
+            if milli == True:
+                i = i/1000
+            new_index.append(i)
+
+        data.index = new_index
+        new_cols = []
+
+        for i in np.arange(len(data.columns)):
+            new_cols.append(str(data.columns[i]))
+        data.columns = new_cols
+
+        Data['original'] = data
+        print 'Data Loaded'
+        Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
+        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
+        print "Made plots folder"
+
+    else:
+        raise ValueError('Not an acceptable file type')
+    return Data, Settings
+
+def mkdir_p(path):
+    '''
+    This function creates a folder at the end of the specified path, unless the folder already exsists. 
+    '''
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
+            
+def load_data():
+    '''
+    this function loads in the data file, which should be a single wave in a tab seperated text file with no header.
+    '''
+    load_path = raw_input("Full File Path for data input: ")
+    path = raw_input("Full File Path for data output: ")
+
+    if path[-1] == '/':
+        path = path[:-1]
+
+    folder = raw_input("Sample Name: ")
+    #rate = float(raw_input("Sample rate in seconds/frame: "))
+
+    time, data = np.loadtxt(load_path, delimiter="\t", usecols=(0,1),  unpack=True)
+    mkdir_p(path+'/'+folder)
+    rate = time[1] - time[0] #changed so that there isn't a prompt for it
+
+    Settings = {'Uploaded File Location':load_path, 'Save Location':path, 
+                'Sample Folder':folder, 'Sample Rate (s/frame)':rate} 
+    #this is the object that will contain all information about the analysis that was performed. it is saved out as a CSV later. 
+    #A new one is initialized everytime the data is loaded in.
+
+    Data = {'original':Series(data = data, index = time)}
+    Results = {} #make this here to clean all old results
+
+    print 'Sample',folder, 'is', (time[-1]-time[0]), 'seconds long'
+    return Data, Settings, Results
+
+def string_eval(string):
+    try:
+        num = float(string)
+        return num
+    except ValueError:
+        return string
+
+def load_settings(Settings):
+    '''
+    '''
+    from ast import literal_eval
+    load_set_path = raw_input("Full File Path for Settings file: ")
+    
+    settings_temp = pd.read_csv(load_set_path, index_col=0, header=0)
+    exclusion_list = ['Uploaded File Location', 'Sample Folder', 
+                      'Sample Rate (s/frame)', 'Save Location', 
+                      'Baseline', 'Baseline-Rolling', 'Settings File']
+    settings_temp = settings_temp.ix[:,0]
+    for key, val in settings_temp.iteritems():
+        
+        if key in exclusion_list:
+            continue
+        else:
+            #print key, val
+            Settings[key] = string_eval(val)
+            
+            if val == 'True':
+                Settings[key] = True
+            if val == 'False':
+                Settings[key] = False
+                
+    Settings['Settings File'] = load_set_path
+    return Settings
+
+def display_settings(Settings):
+    '''
+    '''
+    Settings_copy = Settings.copy()
+    
+    if 'Baseline-Rolling' in Settings_copy.keys():
+        Settings_copy['Baseline-Rolling'] = True
+    Settings_copy = DataFrame.from_dict(Settings_copy, orient='index')
+    Settings_copy.columns = ['Value']
+    Settings_copy = Settings_copy.sort()
+    return Settings_copy
+
 #
 #Transform
 #wrappers and functions
@@ -1305,7 +1445,54 @@ def burstarea(data, time, burst_start, burst_end, dx = 10):
         #print "%s = %s" %(count,area)
     return burst_area
 
-def graph_detected_events(Data, Settings, Results, roi, lcpro = False):
+#
+#Save
+#
+#
+def Save_Results(Settings, Results):
+    '''
+    Save function for all files out of SWAN. All files must be present, otherwise it will not save. all files in the same folder with the same name will be saved over, except for the Settings file, which always has a unique name.
+    '''
+    path = Settings['Save Location']
+    folder = Settings['Sample Folder']
+    rate = Settings['Sample Rate (s/frame)']
+    #bstart = results_bursts['Burst Start']
+    
+    #bstart_gHRV = (np.subtract(bstart,bstart[0])) #get the relative time for each burst start, needed for gHRV to run using the tot
+    #np.savetxt(r'%s/%s/%s_ttot_times.txt' %(path, folder, folder), bstart_gHRV)
+    #maxptime_gHRV = (np.subtract(maxptime, maxptime[0])) #get the relative time for each R peak, needed for gHRV to run
+    #np.savetxt(r'%s/%s/%s_rr_times.txt' %(path,folder, folder), maxptime_gHRV)
+
+    Results['Bursts'].to_csv(r'%s/%s/%s_burst_results.csv' %(path, folder, folder))
+    Results['Bursts Summary'].to_csv(r'%s/%s/%s_burst_results_summary.csv'%(path,folder, folder))
+    Results['Peaks'].to_csv(r'%s/%s/%s_peak_results.csv'%(path, folder, folder))
+    Results['Peaks Summary'].to_csv(r'%s/%s/%s_peak_results_summary.csv'%(path, folder, folder))
+    
+    Settings_panda = DataFrame.from_dict(Settings, orient='index')
+    colname = 'Settings: ' + str(datetime.datetime.now())
+    Settings_panda.columns = [colname]
+    Settings_panda = Settings_panda.sort()
+    Settings_panda.to_csv(r'%s/%s/%s_%s.csv'%(path, folder, folder,colname))
+    
+    print "All results saved to", path+'/'+folder
+    print "Thank you for chosing SWAN for all your basic analysis needs. Proceed for graphs and advanced analysis."
+    
+#
+#Line Plots
+#general plots as well as graphing functions
+#several of the other functions have specific, paired functions, thus their code is not listed here
+#
+
+def plot_rawdata(Data):
+    figure = plt.plot(Data['original'].index, Data['original'], 'k')
+    plt.title('Raw Data')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Amplitude')
+    DataCursor(figure)
+    plt.show(figure) 
+
+
+def graph_detected_events_save(Data, Settings, Results, roi, lcpro = False):
     '''
     Graph burst and peak results for a given roi. if roi = 'random', then a random roi will be selected.
     There is also the option to overlay LCpro events and boundaries.
@@ -1411,51 +1598,146 @@ def graph_detected_events(Data, Settings, Results, roi, lcpro = False):
     plt.savefig(r'%s/%s.pdf'%(Settings['plots folder'],roi))
     plt.close()
 
-#
-#Save
-#
-#
-def Save_Results(Settings, Results):
+def graph_detected_events_display(Data, Settings, Results, roi, lcpro = False):
     '''
-    Save function for all files out of SWAN. All files must be present, otherwise it will not save. all files in the same folder with the same name will be saved over, except for the Settings file, which always has a unique name.
+    Graph burst and peak results for a given roi. if roi = 'random', then a random roi will be selected.
+    There is also the option to overlay LCpro events and boundaries.
     '''
-    path = Settings['Save Location']
-    folder = Settings['Sample Folder']
-    rate = Settings['Sample Rate (s/frame)']
-    #bstart = results_bursts['Burst Start']
     
-    #bstart_gHRV = (np.subtract(bstart,bstart[0])) #get the relative time for each burst start, needed for gHRV to run using the tot
-    #np.savetxt(r'%s/%s/%s_ttot_times.txt' %(path, folder, folder), bstart_gHRV)
-    #maxptime_gHRV = (np.subtract(maxptime, maxptime[0])) #get the relative time for each R peak, needed for gHRV to run
-    #np.savetxt(r'%s/%s/%s_rr_times.txt' %(path,folder, folder), maxptime_gHRV)
+    if roi.lower() == 'random':
+        rand_int = np.random.randint(len(Data['original'].columns))
+        roi = Data['original'].columns[rand_int]
+    
+    #set the correct data array
+    if Settings['Baseline Type'] == 'static':
+        data_temp = Data['trans']
+    elif Settings['Baseline Type'] == 'linear': 
+        data_temp = Data['shift']
+    elif Settings['Baseline Type'] == 'rolling':
+        data_temp = Data['rolling']
 
-    Results['Bursts'].to_csv(r'%s/%s/%s_burst_results.csv' %(path, folder, folder))
-    Results['Bursts Summary'].to_csv(r'%s/%s/%s_burst_results_summary.csv'%(path,folder, folder))
-    Results['Peaks'].to_csv(r'%s/%s/%s_peak_results.csv'%(path, folder, folder))
-    Results['Peaks Summary'].to_csv(r'%s/%s/%s_peak_results_summary.csv'%(path, folder, folder))
+    plt.figure()
+    plt.plot(data_temp.index, data_temp[roi], color = 'k', label= 'Time Series') #plot time series
+    plt.ylim(ymin= min(data_temp.min()), ymax =max(data_temp.max()))
+    plt.xlim(xmin = -1)
+    plt.title(roi+' Events')
     
-    Settings_panda = DataFrame.from_dict(Settings, orient='index')
-    colname = 'Settings: ' + str(datetime.datetime.now())
-    Settings_panda.columns = [colname]
-    Settings_panda = Settings_panda.sort()
-    Settings_panda.to_csv(r'%s/%s/%s_%s.csv'%(path, folder, folder,colname))
-    
-    print "All results saved to", path+'/'+folder
-    print "Thank you for chosing SWAN for all your basic analysis needs. Proceed for graphs and advanced analysis."
-    
-#
-#Line Plots
-#general plots as well as graphing functions
-#several of the other functions have specific, paired functions, thus their code is not listed here
-#
+    #plot peaks and valleys
+    try:
+        plt.plot(Results['Peaks'][roi].index, Results['Peaks'][roi]['Peaks Amplitude'], 
+                 marker = '^', color = 'b', linestyle = 'None', alpha = 1, label = 'RAIN Peak', markersize = 5)
+    except:
+        pass
+    try:
+        plt.plot(Results['Valleys'][roi].index, Results['Valleys'][roi]['Valley Amplitude'], 
+                 marker = 'v', color = 'm', linestyle = 'None', alpha = 1, label = 'RAIN Valley', markersize = 5)
+    except:
+        pass
+    #plot bursts
+    try:
+        if Settings['Baseline Type'] == 'static':
+            start_y = []
+            end_y = []
+            for i in np.arange(len(Results['Bursts'][roi]['Burst Start'])):
+                start_y.append(Settings['Threshold'])
+            for i in np.arange(len(Results['Bursts'][roi]['Burst End'])):
+                end_y.append(Settings['Threshold'])
+            plt.plot(Results['Bursts'][roi]['Burst Start'], start_y,
+                     marker = 's', color = 'g', linestyle = 'None', alpha = 1, label = 'Burst Start', markersize = 5)
+            plt.plot(Results['Bursts'][roi]['Burst End'], end_y,
+                     marker = 's', color = 'y', linestyle = 'None', alpha = 1, label = 'Burst End', markersize = 5)
+            
+        elif Settings['Baseline Type'] == 'linear': 
+            start_y = []
+            end_y = []
+            for i in np.arange(len(Results['Bursts'][roi]['Burst Start'])):
+                start_y.append(Results['Baseline'][roi]*Settings['Threshold'])
+            for i in np.arange(len(Results['Bursts'][roi]['Burst End'])):
+                end_y.append(Results['Baseline'][roi]*Settings['Threshold'])
+            plt.plot(Results['Bursts'][roi]['Burst Start'], start_y,
+                     marker = 's', color = 'g', linestyle = 'None', alpha = 1, label = 'Burst Start', markersize = 5)
+            plt.plot(Results['Bursts'][roi]['Burst End'], end_y,
+                     marker = 's', color = 'y', linestyle = 'None', alpha = 1, label = 'Burst End', markersize = 5)
 
-def plot_rawdata(Data):
-    figure = plt.plot(Data['original'].index, Data['original'], 'k')
-    plt.title('Raw Data')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Amplitude')
-    DataCursor(figure)
-    plt.show(figure) 
+
+        elif Settings['Baseline Type'] == 'rolling':
+            plt.plot(Results['Bursts'][roi]['Burst Start'], Results['Bursts'][roi]['Burst Start Amplitude'],
+                     marker = 's', color = 'g', linestyle = 'None', alpha = 1, label = 'Burst Start', markersize = 5)
+            plt.plot(Results['Bursts'][roi]['Burst End'], Results['Bursts'][roi]['Burst End Amplitude'],
+                     marker = 's', color = 'y', linestyle = 'None', alpha = 1, label = 'Burst End', markersize = 5)
+            plt.plot(Results['Baseline-Rolling'][roi].index, Results['Baseline-Rolling'][roi], 'b') #in this instance, baseline = rolling average
+            plt.plot(Results['Baseline-Rolling'][roi].index, Results['Baseline-Rolling'][roi]+Settings['Threshold'], 'r')
+    
+    except:#this would be the case that no bursts were detected
+        pass
+    
+    if Settings['Baseline Type'] == 'static':
+        plt.hlines(Settings['Threshold'], Data['original'].index[0], Data['original'].index[-1], 'b', label = 'RAIN threshold')
+
+    elif Settings['Baseline Type'] == 'linear': 
+        plt.hlines(Results['Baseline'][roi]*Settings['Threshold'], Data['original'].index[0], 
+                   Data['original'].index[-1], 'b', label = 'RAIN threshold')
+        plt.hlines(0, Data['original'].index[0], Data['original'].index[-1], 'k', label = 'Baseline')
+        
+    elif Settings['Baseline Type'] == 'rolling':
+        plt.plot(Results['Baseline-Rolling'][roi].index, Results['Baseline-Rolling'][roi], 'b') #in this instance, baseline = rolling average
+        plt.plot(Results['Baseline-Rolling'][roi].index, Results['Baseline-Rolling'][roi]+Settings['Threshold'], 'r')
+
+    
+    #LCPRO events
+    if lcpro == True:
+        
+        if Settings['Baseline Type'] == 'static' or Settings['Baseline Type'] == 'rolling':
+            plt.plot(Data['ROI parameters']['Time(s)'].loc[roi], Data['ROI parameters']['Amp(F/F0)'].loc[roi], 
+                     marker = 'o', color = 'r', linestyle = 'none', alpha = 0.4, label = 'LCPro Peak', markersize = 10)
+        elif Settings['Baseline Type'] == 'linear':
+            plt.plot(Data['ROI parameters']['Time(s)'].loc[roi], 
+                     (Data['ROI parameters']['Amp(F/F0)'].loc[roi] - Results['Baseline'][roi]), 
+                     marker = 'o', color = 'r', linestyle = 'none', alpha = 0.4, label = 'LCPro Peak', markersize = 10)
+            
+        plt.vlines(Data['ROI parameters']['Start time (s)'].loc[roi], ymin= min(data_temp.min()), 
+                   ymax =max(data_temp.max()), color = 'r', label = 'LCpro Boundary')
+        plt.vlines(Data['ROI parameters']['End time (s)'].loc[roi], ymin= min(data_temp.min()), 
+                   ymax =max(data_temp.max()), color = 'r')
+    
+    #plt.legend()
+    #plt.savefig(r'%s/%s.pdf'%(Settings['plots folder'],roi))
+    #plt.close()
+    plt.show()
+
+def average_measurement_plot(event_type, meas, Results):
+    """
+    Generates a line plot with error bars for a given event measurement. 
+    X axis is the names of each time series.
+    Parameters
+    ----------
+    event_type: string
+        A string that should be either 'Peaks' or 'Bursts', which will tell the function 
+        which results to pull the measurement from.
+    meas: string
+        A string that specifies which measurement type to use for the figure.
+    Results: dictionary
+        The dictionary that contains all of the results 
+    Returns
+    -------
+    none
+    Notes
+    -----
+    Displays the figure. does not automatically safe out or return the figure object.
+    """
+    
+    if event_type.lower() == 'peaks':
+        measurement = Results['Peaks Grouped'][meas]
+    elif event_type.lower() == 'bursts':
+        measurement = Results['Bursts Grouped'][meas]
+    else:
+        raise ValueError('Not an acceptable event type measurement.\n Must be "Peaks" or "Bursts" ')
+    
+    plt.errorbar(measurement.mean().index, measurement.mean(), measurement.std(), marker = '^')
+    plt.xlabel('Groups')
+    plt.ylabel('%s' %(meas))
+    plt.title('Average %s %s with standard deviation' %(event_type,meas))
+    plt.show()
     
 class DataCursor(object):
     """A simple data cursor widget that displays the x,y location of a
@@ -1521,7 +1803,42 @@ class DataCursor(object):
             annotation.set_visible(True)
             event.canvas.draw()
 
-            
+def raster(Results):
+    """
+    Generates the raster plot from the spikes generated in a dataframe
+    Parameters
+    ----------
+    Results: dictionary
+        dictionary that holds the results. this function relies on the Results['Peaks'].
+    Returns
+    -------
+    none
+    Notes
+    -----
+    Displays the raster plot of the whole time series. 
+    Not sure if it will work with keys that are strings 
+    """
+    n=0
+    for key, value in Results['Peaks'].iteritems():
+        try:
+            key = float(key)
+        except:
+            legend = key
+            key = n
+            plt.legend()
+        temp_y = []
+        for n in np.arange(len(value)):
+            temp_y.append(key)
+        plt.plot(value.index, temp_y, marker = '.', color = 'k', linestyle = 'None', markersize = 2)
+        n+=1
+    plt.xlabel('Time (s)')
+    plt.ylabel('Groups')
+    #plt.ylim(ymin = 2.5)
+    #plt.xlim(xmin = 30000, xmax = 45000)
+    plt.title('Raster plot')
+    plt.show()
+    
+
 #
 #Event Frequency plots
 #
@@ -1739,13 +2056,29 @@ def Results_PSD(Fxx, Pxx):
 #Histogram Entropy
 #
 #
-def histent_peaks(Results):
-    #from __future__ import division
-    #from math import log
-    RR = Results['Peaks']['Intervals'].tolist()
-    NumBin = int(2 * (log(len(RR), 2))); print 'Number of Bins=', NumBin
-    binarray = np.linspace(min(RR), max(RR), NumBin)
-    no, xo = np.histogram(RR, binarray); #print no
+def histent(data_list):
+    """
+    Generates the Histogram Entropy value and bin array for a given list of values.
+    Parameters
+    ----------
+    data_list: list
+        list of float values.
+    Returns
+    -------
+    HistEntropy: float
+        value of the Histogram Entropy of the inputted list.
+    binarray: 1d array
+        the evenly spaced array of bins based on the extremes and length of the input.
+    Notes
+    -----
+    could probably take other types of array objects
+    if all of the samples fall in one bin regardless of the bin size
+    means we have the most predictable sitution and the entropy is 0
+    if we have uniformly dist function, the max entropy will be 1
+    """ 
+    NumBin = int(2 * (log(len(data_list), 2)))
+    binarray = np.linspace(min(data_list), max(data_list), NumBin)
+    no, xo = np.histogram(data_list, binarray); #print no
 
     # normalize the distribution to make area under distribution function unity
     no = no/sum(no); #print no
@@ -1758,66 +2091,51 @@ def histent_peaks(Results):
     # if we have uniformly dist function, the max entropy will be 1
 
     HistEntropy = [-1*(x * log(x, 2))/(log(NumBin,2)) for x in no]
+    #print 'HistEntropy array=', HistEntropy
     HistEntropy = sum(HistEntropy)
     #print 'HistEntropy=', HistEntropy
+    
+    return HistEntropy, binarray
 
-    #plot that hot hot interval
-    plt.hist(RR,binarray)
-    plt.xlabel('Peak Intervals')
-    plt.ylabel('Count')
-    plt.title('Peak Interval Histogram')
-    plt.show()
+def histent_wrapper(event_type, meas, Settings, Results):
     
     if 'Histogram Entropy' not in Results.keys():
-        Results['Histogram Entropy'] = Series(data = HistEntropy, index = ['Peak Intervals'])
-    else:
-        Results['Histogram Entropy']['Peak Intervals'] = HistEntropy
-    return Results
-
-def histent_bursts(Results):
-    #from __future__ import division
-    #from math import log
-    tot = Results['Bursts']['Total Cycle Time'].tolist()
-    tot = np.array(tot, dtype= 'float')
-    NumBin = int(2 * (log(len(tot), 2))); print 'Number of Bins=', NumBin
-    binarray = np.linspace(min(tot), max(tot), NumBin)
-    no, xo = np.histogram(tot, binarray); #print no
-
-    # normalize the distribution to make area under distribution function unity
-    no = no/sum(no); #print no
-
-    # find the bins that have no samples to prevent log(0) in calculation
-    no = no[np.nonzero(no)]    
-
-    # if all of the samples fall in one bin regardless of the bin size
-    # means we have the most predictable sitution and the entropy is 0
-    # if we have uniformly dist function, the max entropy will be 1
-
-    HistEntropy = [-1*(x * log(x, 2))/(log(NumBin,2)) for x in no]
-    HistEntropy =  sum(HistEntropy)
-
-    #plot that hot hot interval
-    plt.hist(tot,binarray)
-    plt.xlabel('Burst Total Cycle Time')
-    plt.ylabel('Count')
-    plt.title('Burst Total Cycle Time Histogram')
-    plt.show()
-    #HistEntropy = sum(HistEntropy)
+        Results['Histogram Entropy'] = DataFrame(index = Data['original'].columns)
     
-    
-    if 'Histogram Entropy' not in Results.keys():
-        Results['Histogram Entropy'] = Series(data = HistEntropy, index = ['Burst Intervals'])
+    if event_type.lower() == 'peaks':
+        measurement = Results['Peaks']
+    elif event_type.lower() == 'bursts':
+        measurement = Results['Bursts']
     else:
-        Results['Histogram Entropy']['Burst Intervals'] = HistEntropy
+        raise ValueError('Not an acceptable event type measurement.\n Must be "Peaks" or "Bursts" ')
+    
+    temp_histent = Series(index = Data['original'].columns)
+    for key, value in measurement.iteritems():
+        
+        temp_list = value[meas].tolist() #copy the correct array into a list
+        
+        try:
+            HistEntropy, binarray = histent(temp_list)
+        except:
+            HistEntropy = NaN
+            binarray = []
+        temp_histent[key] = HistEntropy
+        
+        try:
+            plt.figure(1)
+            plt.hist(temp_list,binarray)
+            plt.xlabel('%s' %meas)
+            plt.ylabel('Count')
+            plt.title(r'%s Histogram - %s' %(meas,key))
+            plt.savefig(r'%s/%s Histogram - %s.pdf'%(Settings['plots folder'], meas, key))
+            plt.close()
+        except:
+            pass
+        
+    Results['Histogram Entropy'][meas] = temp_histent
+    Results['Histogram Entropy'].to_csv(r'%s/%s_Histogram_Entropy.csv'
+                                       %(Settings['Output Folder'], Settings['Label']))
     return Results
-
-#END SWAN CODE
-print "SWAN components loaded."
-
-from PIL import Image
-#END RAIIM/RAIN CODE
-###
-#
 
 
 print "RAIN ready!"
