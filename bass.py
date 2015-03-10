@@ -14,7 +14,6 @@ from matplotlib.widgets import *
 import datetime
 from matplotlib import cbook
 from scipy.signal import butter, lfilter
-from __future__ import division
 from math import log
 from scipy.stats.stats import pearsonr
 from PIL import Image
@@ -128,18 +127,21 @@ def load_wrapper(Data, Settings):
     Currently, loads in files from LCPro, ImageJ, SIMA, and Morgan, which are all specalized
     files exported by the CGW or SW labs. 
     Plain calls a simple .txt file and is intended to be more general purpose
+    
     Parameters
     ----------
     Data: dictionary
         dictionary containing the pandas dataframes that store the data.
     Settings: dictionary
         dictionary that contains the user's settings.
+    
     Returns
     -------
     Data : dictionary
         dictionary containing the pandas dataframes that store the data.
     Settings: dictionary
         dictionary that contains the user's settings.
+    
     Notes
     -----
     Add new file loaders at the end of the function by setting up your own gate. 
@@ -234,7 +236,7 @@ def load_wrapper(Data, Settings):
         new_index = []
         for i in data.index:
             i = round(i, 4)
-            if milli == True:
+            if Settings['Milliseconds'] == True:
                 i = i/1000
             new_index.append(i)
 
@@ -351,6 +353,7 @@ def savitzky_golay(y, window_size, order, deriv=0, rate=1):
     It has the advantage of preserving the original shape and
     features of the signal better than other types of filtering
     approaches, such as moving averages techniques.
+    
     Parameters
     ----------
     y : array_like, shape (N,)
@@ -362,10 +365,12 @@ def savitzky_golay(y, window_size, order, deriv=0, rate=1):
         Must be less then `window_size` - 1.
     deriv: int
         the order of the derivative to compute (default = 0 means only smoothing)
+    
     Returns
     -------
     ys : ndarray, shape (N)
         the smoothed signal (or it's n-th derivative).
+    
     Notes
     -----
     The Savitzky-Golay is a type of low-pass filter, particularly
@@ -373,6 +378,7 @@ def savitzky_golay(y, window_size, order, deriv=0, rate=1):
     approach is to make for each point a least-square fit with a
     polynomial of high order over a odd-sized window centered at
     the point.
+    
     Examples
     --------
     t = np.linspace(-4, 4, 500)
@@ -384,6 +390,7 @@ def savitzky_golay(y, window_size, order, deriv=0, rate=1):
     plt.plot(t, ysg, 'r', label='Filtered signal')
     plt.legend()
     plt.show()
+    
     References
     ----------
     .. [1] A. Savitzky, M. J. E. Golay, Smoothing and Differentiation of
@@ -662,12 +669,12 @@ def user_input_base(Settings):
         Settings['Baseline Type'] = baseline_type
         if 'Rolling Baseline Window' in Settings.keys():
             print "Previous Rolling Baseline Window: %s" %Settings['Rolling Baseline Window']
-        print "Enter the window size of the rolling baseline in milliseconds."
-        Settings['Rolling Baseline Window'] = float(raw_input('Window size in ms: '))
+        print "Enter the window size of the rolling baseline in seconds."
+        Settings['Rolling Baseline Window'] = float(raw_input('Window size in seconds: '))
         window = float(Settings['Rolling Baseline Window'])
         
         #convert window (ms) to index
-        window = int((window/1000.0)/Settings['Sample Rate (s/frame)'])
+        window = int((window)/Settings['Sample Rate (s/frame)'])
         
         if window < 2:
             print ("You entered a window size so small it won't run. Give me a larger window size.")
@@ -911,6 +918,7 @@ def event_peakdet(Data, Settings, Results, roi):
             
             results_peaks = DataFrame({'Peaks Amplitude':maxpeaks, 'Intervals':maxpeaks})
             #peak_sum = results_peaks['Peaks Amplitude'].describe()
+            print roi, 'has no peaks.'
         else:
             maxtab = np.array(maxtab)
             maxptime = maxtab[:,0] #all of the rows and only the first column are time
@@ -926,7 +934,7 @@ def event_peakdet(Data, Settings, Results, roi):
             results_peaks = results_peaks[results_peaks['Peaks Amplitude']<=Settings['Peak Maximum']]
             if results_peaks.empty == True:
                 failure = True
-                
+                print roi, 'has no peaks.'
             else:
                 RR = rrinterval(results_peaks.index)
                 RR.append(NaN)
@@ -958,6 +966,7 @@ def event_peakdet(Data, Settings, Results, roi):
             
             results_peaks = DataFrame({'Peaks Amplitude':maxpeaks, 'Intervals':maxpeaks})
             #peak_sum = results_peaks['Peaks Amplitude'].describe()
+            print roi, 'has no peaks.'
         else:
             maxtab = np.array(maxtab)
             maxptime = maxtab[:,0] #all of the rows and only the first column are time
@@ -972,7 +981,7 @@ def event_peakdet(Data, Settings, Results, roi):
             
             if results_peaks.empty == True:
                 failure = True
-                
+                print roi, 'has no peaks.'
             else:
                 RR = rrinterval(results_peaks.index)
                 RR.append(NaN)
@@ -1004,7 +1013,7 @@ def event_peakdet_wrapper(Data, Settings, Results):
     '''
     
     peaks_dict = {}
-    peaks_sum = DataFrame()
+    #peaks_sum = DataFrame()
     valleys_dict = {}
     
     if Settings['Baseline Type'] == 'linear' or Settings['Baseline Type'] == 'static':
@@ -1027,12 +1036,13 @@ def event_peakdet_wrapper(Data, Settings, Results):
         #peaks_sum[label] = peak_sum
     Results['Peaks'] = peaks_dict
     Results['Valleys'] = valleys_dict
-    Results['Peaks Summary'] = peaks_sum
+    #Results['Peaks Summary'] = peaks_sum
     try:
         master_peaks = pd.concat(Results['Peaks'])
         Results['Peaks-Master'] = master_peaks
     except:
         Results['Peaks-Master'] = DataFrame()
+        print "No Peaks Found in any time series."
     return Results
 
 #
@@ -1108,6 +1118,7 @@ def event_burstdet_wrapper(Data, Settings, Results):
         Results['Bursts-Master'] = master_bursts
     except:
         Results['Bursts-Master'] = DataFrame()
+        print "No Bursts Found in any time series."
     return Results
     
 def event_burstdet(Data, Time, Settings, Results, roi):
@@ -1132,7 +1143,7 @@ def event_burstdet(Data, Time, Settings, Results, roi):
                                                                            Settings['Threshold'], 
                                                                            Settings['Inter-event interval minimum (seconds)'])
     if len(bstart) ==0:
-        print roi+'is empty'
+        print roi+'has no bursts.'
         bstart = [NaN]
         bend = [NaN]
         bdur = [NaN]
@@ -1155,6 +1166,7 @@ def event_burstdet(Data, Time, Settings, Results, roi):
 
     #If there are no bursts, return the empty df and failure flag
     if results_bursts.empty == True:
+        print roi+'has no bursts.'
         failure = True
         return results_bursts, failure
     
@@ -1179,6 +1191,7 @@ def event_burstdet(Data, Time, Settings, Results, roi):
     
     #If there are no bursts, return the empty df and failure flag
     if results_bursts.empty == True:
+        print roi+'has no bursts.'
         failure = True
         return results_bursts, failure
     
@@ -1221,10 +1234,12 @@ def event_burstdet(Data, Time, Settings, Results, roi):
 
     #If there are no bursts, return the empty df and failure flag
     if results_bursts.empty == True:
+        print roi+'has no bursts.'
         failure = True
         return results_bursts, failure
     #Max peak
-    
+    #Retrieves the list of peaks in a burst and selects the one with the greatest amplitdue to be the
+    #'maximum' peak. used in the attack and decay calculations
     burst_peak_max = []
     burst_peak_id = []
     for i in np.arange(len(results_bursts['Burst Start'])):
@@ -1728,8 +1743,7 @@ def average_measurement_plot(event_type, meas, Results):
     -----
     event_type = 'Peaks'
     meas = 'Peaks Amplitude'
-    histent_wrapper(event_type, meas, Settings, Results)
-    Results['Histogram Entropy']
+    average_measurement_plot(event_type, meas,Results)
     """
     
     if event_type.lower() == 'peaks':
@@ -2107,7 +2121,7 @@ def histent(data_list):
     
     return HistEntropy, binarray
 
-def histent_wrapper(event_type, meas, Settings, Results):
+def histent_wrapper(event_type, meas, Data, Settings, Results):
     """
     Wrapper to handle varibles in and out of histent() correctly. Takes two additional parameters
     that dictate which measurement will be executed.
@@ -2118,11 +2132,15 @@ def histent_wrapper(event_type, meas, Settings, Results):
         which results to pull the measurement from.
     meas: string
         A string that specifies which measurement type to use for the figure.
+    Data: dictionary
+        dictionary containing the pandas dataframes that store the data.
+        this function uses the column names of the original data file to organize the 
+        Histogram Entropy table.
     Settings: dictionary
 
     Results: dictionary
         The dictionary that contains all of the results. Results['Peaks'] and/or Results['Bursts']
-        is used.
+        is used. Results['Peaks-Master'] or Results['Bursts-Master'] are also used to 
     Returns
     -------
     Results: dictionary
@@ -2150,38 +2168,297 @@ def histent_wrapper(event_type, meas, Settings, Results):
     
     if event_type.lower() == 'peaks':
         measurement = Results['Peaks']
+        columns = Results['Peaks-Master']
+
     elif event_type.lower() == 'bursts':
         measurement = Results['Bursts']
+        columns = Results['Bursts-Master']
     else:
         raise ValueError('Not an acceptable event type measurement.\n Must be "Peaks" or "Bursts" ')
     
-    temp_histent = Series(index = Data['original'].columns)
-    for key, value in measurement.iteritems():
+    if meas.lower() == 'all':
+        for name in columns:
+
+            Results = histent_wrapper(event_type, name, Data, Settings, Results)
+
+        print "All %s measurements analyzed." %(event_type)
+        return Results
+
+    else:
+        temp_histent = Series(index = Data['original'].columns)
+        for key, value in measurement.iteritems():
+            
+            temp_list = value[meas].tolist() #copy the correct array into a list
+            
+            try:
+                HistEntropy, binarray = histent(temp_list)
+            except:
+                HistEntropy = NaN
+                binarray = []
+            temp_histent[key] = HistEntropy
+            
+            try:
+                plt.figure(1)
+                plt.hist(temp_list,binarray)
+                plt.xlabel('%s' %meas)
+                plt.ylabel('Count')
+                plt.title(r'%s Histogram - %s' %(meas,key))
+                plt.savefig(r'%s/%s Histogram - %s.pdf'%(Settings['plots folder'], meas, key))
+                plt.close()
+            except:
+                pass
+            
+        Results['Histogram Entropy'][meas] = temp_histent
+        Results['Histogram Entropy'].to_csv(r'%s/%s_Histogram_Entropy.csv'
+                                           %(Settings['Output Folder'], Settings['Label']))
+        return Results
+
+def moving_statistics(event_type, meas, window, Data, Settings, Results):
+    """
+    Generates the moving mean, standard deviation, and count for a given measurement.
+    Saves out the dataframes of these three results automatically with the window size in the name.
+    If meas == 'All', then the function will loop and produce these tables for all measurements. 
+    
+    Parameters
+    ----------
+    event_type: string
+        A string that should be either 'Peaks' or 'Bursts', which will tell the function 
+        which results to pull the measurement from.
+    meas: string
+        A string that specifies which measurement type to use for the figure.
+    window: float
+        the size of the window for the moving statistics in seconds.
+    Data: dictionary
+        dictionary containing the pandas dataframes that store the data.
+        this function uses the time index of the analyzed data to window over.
+    Settings: dictionary
+        dictionary that contains the user's settings.
+        this function uses the ['Baseline Type'] and ['Output Folder'] to direct flow
+    Results: dictionary
+        The dictionary that contains all of the results
+    
+    Returns
+    -------
+    Results: dictionary
+        the dictionary that contains all of the results. 
+        A new dictionary is added called Results['Moving Stats'], which contains the dataframes called things like
+        Results['Moving Stats']['Measurement-Count'], Results['Moving Stats']['Measurement-Mean'], and Results['Moving Stats']['Measurement-Std']. These files are both displayed and saved out in the loca
+    
+    Notes
+    -----
+    Moving statistics are a handy way to see how measurements are changing over time.
+    Choose a window size that is scaled appropreately for your data. The larger the window,
+    the coarser the averaging will be. 
+    It seems self explaintory why mean and standardeviation are useful, but count is also included.
+    This is to be able to calculate frequency in the window, if it is desired: count/window.
+    
+    Examples
+    --------
+    event_type = 'Peaks'
+    meas = 'all'
+    window = 60 #seconds
+    Results = moving_statistics(event_type, meas, window, Data, Settings, Results)
+    """
+    #make Results dictionary if does not exsist
+    if 'Moving Stats' not in Results.keys():
+        Results['Moving Stats'] = {}
+    
+    #select and use the correct time 
+    if Settings['Baseline Type'] == 'static':
+        time_temp = Data['trans'].index
+    elif Settings['Baseline Type'] == 'linear': 
+        time_temp = Data['shift'].index
+    elif Settings['Baseline Type'] == 'rolling':
+        time_temp = Data['rolling'].index
+
+    
+    if event_type.lower() == 'peaks':
+        dictionary = Results['Peaks']
+        columns = Results['Peaks-Master']
+    elif event_type.lower() == 'bursts':
+        dictionary = Results['Bursts']
+        columns = Results['Bursts-Master']
+    else:
+        raise ValueError('Not an acceptable event type measurement.\n Must be "Peaks" or "Bursts" ')
         
-        temp_list = value[meas].tolist() #copy the correct array into a list
+    if meas.lower() == 'all':
         
-        try:
-            HistEntropy, binarray = histent(temp_list)
-        except:
-            HistEntropy = NaN
-            binarray = []
-        temp_histent[key] = HistEntropy
+        for name in columns:
+            Results = moving_statistics(event_type, name, window, Data, Settings, Results)
+        print "All %s measurements analyzed." %(event_type)
+        return Results
+    
+    else:
+                
+        import math
+        #get number
+        num = math.trunc(time_temp[-1]/window)
+        #create data storage
+        sliding_count = DataFrame(index= (np.arange(num)*window))
+        sliding_mean = DataFrame(index= (np.arange(num)*window)) 
+        sliding_std = DataFrame(index= (np.arange(num)*window))
         
-        try:
-            plt.figure(1)
-            plt.hist(temp_list,binarray)
-            plt.xlabel('%s' %meas)
-            plt.ylabel('Count')
-            plt.title(r'%s Histogram - %s' %(meas,key))
-            plt.savefig(r'%s/%s Histogram - %s.pdf'%(Settings['plots folder'], meas, key))
-            plt.close()
-        except:
-            pass
+        for key, value in dictionary.iteritems():
         
-    Results['Histogram Entropy'][meas] = temp_histent
-    Results['Histogram Entropy'].to_csv(r'%s/%s_Histogram_Entropy.csv'
-                                       %(Settings['Output Folder'], Settings['Label']))
-    return Results
+            temp_count = Series(index= (np.arange(num)*window)) 
+            temp_mean = Series(index= (np.arange(num)*window))
+            temp_std = Series(index= (np.arange(num)*window))
+
+            for i in (np.arange(num)*window):
+                temp_count[i] = value[meas][i:(i+window)].count() #get the count in the window
+                temp_mean[i] = value[meas][i:(i+window)].mean() #get the mean in the window
+                temp_std[i] = value[meas][i:(i+window)].std() #get the mean in the window
+
+            temp_mean = temp_mean.fillna(0) #temp mean returns NaN for windows with no events. make it zero for graphing
+            temp_std = temp_std.fillna(0)
+            
+            sliding_count[key] = temp_count #store series in results table
+            sliding_mean[key] = temp_mean #store series in results table
+            sliding_std[key] = temp_std
+        
+        #my attempt at reordering so the columns are in increaing order
+        Results['Moving Stats'][r'%s-Count'%meas] = sliding_count.sort_index(axis = 1)
+        Results['Moving Stats'][r'%s-Mean'%meas] = sliding_mean.sort_index(axis = 1) 
+        Results['Moving Stats'][r'%s-Std'%meas] = sliding_std.sort_index(axis = 1)
+        
+        #autosave out these results
+        Results['Moving Stats'][r'%s-Count'%meas].to_csv(r'%s/%s_%s_Count.csv'
+                                       %(Settings['Output Folder'], Settings['Label'], meas))
+        Results['Moving Stats'][r'%s-Mean'%meas].to_csv(r'%s/%s_%s_Mean.csv'
+                                       %(Settings['Output Folder'], Settings['Label'], meas))
+        Results['Moving Stats'][r'%s-Std'%meas].to_csv(r'%s/%s_%s_std.csv'
+                                       %(Settings['Output Folder'], Settings['Label'], meas))
+        
+        print meas, 'Count'
+        print Results['Moving Stats'][r'%s-Count'%meas]
+        
+        print meas, 'Mean'
+        print Results['Moving Stats'][r'%s-Mean'%meas]
+        
+        print meas, 'Std'
+        print Results['Moving Stats'][r'%s-Std'%meas]
+        return Results
+def analyze(Data, Settings, Results):
+    """
+    The pipeline for event detection. Follows the strict '3 arguments in, 3 arguments out'
+    rule. These dictionaries must be intalized before this, as well as all of the Settings values.
+    Detects bursts and peaks for the data file that is uploaded.
+    Settings used are saved out automatically with a time stamp as a receipt of each analysis performed. 
+
+    Parameters
+    ----------
+    Data: dictionary
+        an empty dictionary named Data.
+    Settings: dictionary
+        dictionary that contains the user's settings.
+    Results: dictionary
+        an empty dictionary named Data.
+    
+    Returns
+    -------
+    Data: dictionary
+        Contains the DataFrames with the time series data. Keys define which version of the data it is.
+    Settings: dictionary
+        dictionary that contains the user's settings.
+    Results: dictionary
+        Contains the following objects:
+            Peaks: dictionary
+                keys are the column names from the Data DataFrames. objects are DataFrames that contain information about each peak detected, indexed by peak time.
+            Peaks-Master: DataFrame
+                multi-indexed DataFrame, created by concatenating all Peaks DataFrames. Column names and peak time are the two indexes. Automatically saved in the Settings['output folder'] location.
+            Peaks Grouped: pandas DataFrame GroupedBy object
+                a single object that contains all peak data GroupedBy time series name/key.
+            Peaks-Master Summary: DataFrame
+                multi-indexed DataFrame, created by used pd.describe() to generate summary statistcs about all peak information, segregated by time series name/key. statistcs generated are: count, mean, standard deviation, minimum, maximum, quartiles. Automatically saved in the Settings['output folder'] location.
+            Bursts: dictionary
+                keys are the column names from the Data DataFrames. objects are DataFrames that contain information about each burst detected. has an arbitrary index, which can be roughly thought of as burst number.
+            Bursts-Master: DataFrame
+                multi-indexed DataFrame, created by concatenating all Bursts DataFrames. Column names and burst number are the two indexes. Automatically saved in the Settings['output folder'] location.
+            Bursts Grouped: pandas DataFrame GroupedBy object
+                a single object that contains all burst data GroupedBy time series name/key.
+            Bursts-Master Summary: DataFrame
+                multi-indexed DataFrame, created by used pd.describe() to generate summary statistcs about all burst information, segregated by time series name/key. statistcs generated are: count, mean, standard deviation, minimum, maximum, quartiles. Automatically saved in the Settings['output folder'] location.
 
 
-print "RAIN ready!"
+    Notes
+    -----
+    This function is the top level function of the bass pipeline. 
+    It has a few handy printed outputs, such as how long an analysis took, which step was just completed, lists of which objects contained no peaks or bursts. it also prints a list of key names and analysis measurements, which can be used in further analysis steps.
+    
+    """
+    start = t.clock()
+    #Load
+    Data, Settings = load_wrapper(Data, Settings)
+        
+    #transform data
+    Data = transform_wrapper(Data, Settings)
+    print 'Transformation completed'
+
+    #set baseline
+    Data, Settings, Results = baseline_wrapper(Data, Settings, Results)
+    print 'Baseline set completed'
+
+    #run peak detection
+    Results = event_peakdet_wrapper(Data, Settings, Results)
+    print 'Peak Detection completed'
+
+    #run burst detection
+    Results = event_burstdet_wrapper(Data, Settings, Results)
+    print 'Burst Detection completed'
+
+    #Save all the graphs
+    if Settings['Generate Graphs'] == True:
+        for label, col in Data['original'].iteritems():
+            graph_detected_events_save(Data, Settings, Results, 
+                                  roi = label, lcpro = Settings['Graph LCpro events'])
+        print "Graphs Saved"
+
+    #Save master files 
+    Results['Peaks-Master'].to_csv(r'%s/%s_Peak_Results.csv'
+                                   %(Settings['Output Folder'], Settings['Label']))
+    Results['Bursts-Master'].to_csv(r'%s/%s_Bursts_Results.csv'
+                                    %(Settings['Output Folder'], Settings['Label']))
+
+    #Save Master Summary Files
+    burst_grouped = Results['Bursts-Master'].groupby(level=0)
+    Results['Burst-Master Summary'] = burst_grouped.describe()
+    Results['Burst-Master Summary'].to_csv(r'%s/%s_Bursts_Results_Summary.csv'
+                                           %(Settings['Output Folder'], Settings['Label']))
+    Results['Bursts Grouped'] = burst_grouped
+    peak_grouped = Results['Peaks-Master'].groupby(level=0)
+    Results['Peaks-Master Summary'] = peak_grouped.describe()
+    Results['Peaks-Master Summary'].to_csv(r'%s/%s_Peaks_Results_Summary.csv'
+                                           %(Settings['Output Folder'], Settings['Label']))
+    Results['Peaks Grouped'] = peak_grouped
+
+    #save settings
+    Settings_panda = DataFrame.from_dict(Settings, orient='index')
+    colname = 'Settings: ' + str(datetime.datetime.now())
+    Settings_panda.columns = [colname]
+    Settings_panda = Settings_panda.sort()
+    Settings_panda.to_csv(r"%s/%s_Settings.csv"%(Settings['Output Folder'], 
+                                                 Settings['Label']))
+
+    end = t.clock()
+    run_time = end-start
+    print "Analysis Complete: ", np.round(run_time,4), " Seconds"
+    print "\n--------------------------------------------"
+
+    print "Data Column Names/Keys"
+    print "-----"
+    for name in Data['original']:
+        print name
+    print "\n--------------------------------------------"
+    print "Available Measurements from Peaks for further analysis:"
+    print "-----"
+    for label, col in Results['Peaks-Master'].iteritems():
+        print label
+    print "\n--------------------------------------------"
+    print "Available Measurements from Bursts for further analysis:"
+    print "-----"
+    for label, col in Results['Bursts-Master'].iteritems():
+        print label
+    print 'Event Detection Complete!'    
+
+#END OF CODE
+print "BASS ready!"
