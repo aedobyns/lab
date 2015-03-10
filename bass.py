@@ -17,6 +17,7 @@ from scipy.signal import butter, lfilter
 from math import log
 from scipy.stats.stats import pearsonr
 from PIL import Image
+from pandas.tools.plotting import autocorrelation_plot
 #
 #Upload
 #Data and Settings. 
@@ -2442,6 +2443,7 @@ def analyze(Data, Settings, Results):
     end = t.clock()
     run_time = end-start
     print "Analysis Complete: ", np.round(run_time,4), " Seconds"
+    
     print "\n--------------------------------------------"
 
     print "Data Column Names/Keys"
@@ -2458,7 +2460,11 @@ def analyze(Data, Settings, Results):
     print "-----"
     for label, col in Results['Bursts-Master'].iteritems():
         print label
-    print 'Event Detection Complete!'    
+    
+    print 'Event Detection Complete!'
+    
+    return Data, Settings, Results
+
 
 #END OF CODE
 print "BASS ready!"
