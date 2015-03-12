@@ -2409,23 +2409,22 @@ def analyze(Data, Settings, Results):
 
     #Save Master Summary Files
     burst_grouped = Results['Bursts-Master'].groupby(level=0)
-    Results['Burst-Master Summary'] = burst_grouped.describe()
-    Results['Burst-Master Summary'].to_csv(r'%s/%s_Bursts_Results_Summary.csv'
+    burst_grouped = burst_grouped.describe()
+    burst_grouped.to_csv(r'%s/%s_Bursts_Results_Summary.csv'
                                            %(Settings['Output Folder'], Settings['Label']))
-    Results['Bursts Grouped'] = burst_grouped
+    
     peak_grouped = Results['Peaks-Master'].groupby(level=0)
-    Results['Peaks-Master Summary'] = peak_grouped.describe()
-    Results['Peaks-Master Summary'].to_csv(r'%s/%s_Peaks_Results_Summary.csv'
+    peak_grouped= peak_grouped.describe()
+    peak_grouped.to_csv(r'%s/%s_Peaks_Results_Summary.csv'
                                            %(Settings['Output Folder'], Settings['Label']))
-    Results['Peaks Grouped'] = peak_grouped
 
     #save settings
     Settings_panda = DataFrame.from_dict(Settings, orient='index')
     colname = 'Settings: ' + str(datetime.datetime.now())
     Settings_panda.columns = [colname]
     Settings_panda = Settings_panda.sort()
-    Settings_panda.to_csv(r"%s/%s_Settings.csv"%(Settings['Output Folder'], 
-                                                 Settings['Label']))
+    Settings_panda.to_csv(r"%s/%s_Settings_%s.csv"%(Settings['Output Folder'], 
+                                                 Settings['Label'], colname))
 
     end = t.clock()
     run_time = end-start
