@@ -147,7 +147,14 @@ def load_wrapper(Data, Settings):
     -----
     Add new file loaders at the end of the function by setting up your own gate. 
     """
-    
+
+    #make output folder if it does not exist
+    mkdir_p(Settings['Output Folder'])
+
+    Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+    mkdir_p(Settings['plots folder']) #makes a plots folder if does not exist
+    print "Made plots folder"
+
     #LCPro File extraction
     if Settings['File Type'] == 'LCPro':
 
@@ -162,6 +169,8 @@ def load_wrapper(Data, Settings):
         Data['ROI parameters'].index = new_index
         Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
         print 'Data Loaded'
+
+        
 
     #ImageJ
     elif Settings['File Type'] == 'ImageJ':
@@ -189,25 +198,18 @@ def load_wrapper(Data, Settings):
         Settings['Graph LCpro events'] = False
         print 'Data Loaded'
 
-        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
-        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
-        print "Made plots folder"
-
     #SIMA
     elif Settings['File Type'] == 'SIMA':
-        data = pd.read_csv(r'%s' %Settings['folder'], sep = '\t')
+        data = pd.read_csv(r'%s/%s' %(Settings['folder'], Settings['Label']), sep = '\t')
         del data['sequence']
+        del data['Unnamed: 0']
         data = data.ix[2:]
-        data.index = np.arange(len(data))
-        del data['frame']
+        data.index = data['time']
+        del data['time']
         Data['original'] = data
         Settings['Graph LCpro events'] = False
         Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
         print 'Data Loaded'
-
-        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
-        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
-        print "Made plots folder"
 
     #Plain text, no headers, col[0] is time in seconds
     elif Settings['File Type'] == 'Plain':
@@ -224,9 +226,8 @@ def load_wrapper(Data, Settings):
         Data['original'] = data
         print 'Data Loaded'
         Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
-        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
-        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
-        print "Made plots folder"
+        Settings['Graph LCpro events'] = False
+
 
     elif Settings['File Type'] == 'Morgan':
         data = pd.read_csv(r'%s/%s' %(Settings['folder'],Settings['Label']), sep = ',', 
@@ -251,10 +252,7 @@ def load_wrapper(Data, Settings):
         Data['original'] = data
         print 'Data Loaded'
         Settings['Sample Rate (s/frame)'] = Data['original'].index[1] - Data['original'].index[0]
-        Settings['plots folder'] = Settings['Output Folder'] +"/plots"
-        mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
-        print "Made plots folder"
-
+        Settings['Graph LCpro events'] = False
     else:
         raise ValueError('Not an acceptable file type')
     return Data, Settings
@@ -270,33 +268,6 @@ def mkdir_p(path):
             pass
         else: raise
             
-def load_data():
-    '''
-    this function loads in the data file, which should be a single wave in a tab seperated text file with no header.
-    '''
-    load_path = raw_input("Full File Path for data input: ")
-    path = raw_input("Full File Path for data output: ")
-
-    if path[-1] == '/':
-        path = path[:-1]
-
-    folder = raw_input("Sample Name: ")
-    #rate = float(raw_input("Sample rate in seconds/frame: "))
-
-    time, data = np.loadtxt(load_path, delimiter="\t", usecols=(0,1),  unpack=True)
-    mkdir_p(path+'/'+folder)
-    rate = time[1] - time[0] #changed so that there isn't a prompt for it
-
-    Settings = {'Uploaded File Location':load_path, 'Save Location':path, 
-                'Sample Folder':folder, 'Sample Rate (s/frame)':rate} 
-    #this is the object that will contain all information about the analysis that was performed. it is saved out as a CSV later. 
-    #A new one is initialized everytime the data is loaded in.
-
-    Data = {'original':Series(data = data, index = time)}
-    Results = {} #make this here to clean all old results
-
-    print 'Sample',folder, 'is', (time[-1]-time[0]), 'seconds long'
-    return Data, Settings, Results
 
 def string_eval(string):
     try:
@@ -2124,8 +2095,8 @@ def histent(data_list):
 
 def histent_wrapper(event_type, meas, Data, Settings, Results):
     """
-    Wrapper to handle varibles in and out of histent() correctly. Takes two additional parameters
-    that dictate which measurement will be executed.
+    Calculates histogram entropy value and plots histogram. this is a Wrapper to handle varibles in and out of histent() correctly. Takes two additional parameters that dictate which measurement will be executed. If meas is set to 'all', then all available measurements from the event_type chosen will be calculated iteratevely. 
+
     Parameters
     ----------
     event_type: string
@@ -2142,11 +2113,11 @@ def histent_wrapper(event_type, meas, Data, Settings, Results):
     Results: dictionary
         The dictionary that contains all of the results. Results['Peaks'] and/or Results['Bursts']
         is used. Results['Peaks-Master'] or Results['Bursts-Master'] are also used to 
+    
     Returns
     -------
     Results: dictionary
-        The dictionary that contains all of the results. Results['Histogram Entropy'], a dataframe
-        is created or added to.
+        The dictionary that contains all of the results. Results['Histogram Entropy'], a dataframe is created or added to.
     Notes
     -----
     A histogram is generated as well, and is saved directly to the plots folder stored in Settings['plots folder'].
@@ -2339,6 +2310,7 @@ def moving_statistics(event_type, meas, window, Data, Settings, Results):
         print meas, 'Std'
         print Results['Moving Stats'][r'%s-Std'%meas]
         return Results
+
 def analyze(Data, Settings, Results):
     """
     The pipeline for event detection. Follows the strict '3 arguments in, 3 arguments out'
