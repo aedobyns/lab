@@ -277,15 +277,31 @@ def string_eval(string):
         return string
 
 def load_settings(Settings):
-    '''
-    '''
-    from ast import literal_eval
-    load_set_path = raw_input("Full File Path for Settings file: ")
+    """
+    Load a previously saved BASS.py settings file to use for your settings.
+    Parameters
+    ----------
+    Settings: dictionary
+        holds settings. this function uses the ['Settings File']. 
     
-    settings_temp = pd.read_csv(load_set_path, index_col=0, header=0)
-    exclusion_list = ['Uploaded File Location', 'Sample Folder', 
-                      'Sample Rate (s/frame)', 'Save Location', 
-                      'Baseline', 'Baseline-Rolling', 'Settings File']
+    Returns
+    -------
+    Settings: dictionary
+        updated Settings dictionary.
+    Notes
+    -----
+    This function calls in a csv and parses the objects inside into the settings dictionary. There are a handful of settings which do not get included because they are unique to each data file. They are in the exclusion_list: 'plots folder', 'folder', 'Sample Rate (s/frame)', 'Output Folder', 'Baseline', 'Baseline-Rolling', 'Settings File', 'Milliseconds', 'Label', 'File Type'. it is simple to add more keys to this list if as changes to the settings file are made.
+    Examples
+    --------
+    Settings['Settings File'] = '~/Users/me/Neuron Modeling/data/IP0_9/Settings.csv'
+    Settings = load_settings(Settings)
+    """
+
+    settings_temp = pd.read_csv(Settings['Settings File'], index_col=0, header=0, sep='\t')
+    exclusion_list = ['plots folder', 'folder', 
+                      'Sample Rate (s/frame)', 'Output Folder', 
+                      'Baseline', 'Baseline-Rolling', 'Settings File', 'Milliseconds',
+                      'Label', 'File Type']
     settings_temp = settings_temp.ix[:,0]
     for key, val in settings_temp.iteritems():
         
@@ -300,7 +316,6 @@ def load_settings(Settings):
             if val == 'False':
                 Settings[key] = False
                 
-    Settings['Settings File'] = load_set_path
     return Settings
 
 def display_settings(Settings):
