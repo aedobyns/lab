@@ -330,6 +330,48 @@ def display_settings(Settings):
     Settings_copy = Settings_copy.sort()
     return Settings_copy
 
+def load_results(location, event_type, Results):
+        """
+    Loads in a previous master results file.
+    Parameters
+    ----------
+    location : string
+        Full file path and name for the file.
+    event_type: string
+        Which type of result it is: peaks or bursts.
+    Results: dictionary
+        dictionary named Results.
+    Returns
+    -------
+    Results : dictionary
+        updated to now contain the master dataframe and the individual DataFrame dictionary.
+    Notes
+    -----
+    Handy way to load in just a previous Results file. 
+    Examples
+    --------
+    Results = {}
+    Results = load_results('/my/file/path/Peaks_Results.csv', 'Peaks', Results)
+    """
+    try:
+        temp = pd.read_csv(location, index_col = [0,1])
+        
+        temp_grouped = temp.groupby(level = 0)
+        temp_dict = {}
+        for key, df in temp_grouped:
+            df.index = df.index.droplevel(0)
+            temp_dict[str(key)] = df
+        if event_type.lower() == 'bursts':
+            Results['Bursts-Master'] = temp
+            Results['Bursts'] = temp_dict
+        if event_type.lower() == 'peaks':
+            Results['Peaks-Master'] = temp
+            Results['Peaks'] = temp_dict
+        return Results
+    except:
+        raise OSError('Could not load Results. :(')
+    
+
 #
 #Transform
 #wrappers and functions
