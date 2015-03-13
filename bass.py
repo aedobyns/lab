@@ -1129,6 +1129,7 @@ def event_burstdet(Data, Time, Settings, Results, roi):
                                                                            Results['Baseline-Rolling'][roi], 
                                                                            Settings['Threshold'], 
                                                                            Settings['Inter-event interval minimum (seconds)'])
+    failure = False
     if len(bstart) ==0:
         print roi+'has no bursts.'
         bstart = [NaN]
@@ -1137,9 +1138,13 @@ def event_burstdet(Data, Time, Settings, Results, roi):
         if Settings['Baseline Type'] == 'rolling':
             b_start_amp=[NaN]
             b_end_amp=[NaN]
+        failure = True
+        results_bursts = DataFrame()
+        return results_bursts, failure
     
-    failure = False
+    
     results_bursts = DataFrame({'Burst Start': bstart})
+    results_bursts.index = bstart
     results_bursts['Burst End'] = bend
     results_bursts['Burst Duration'] = bdur
     
@@ -1719,7 +1724,7 @@ def average_measurement_plot(event_type, meas, Results):
     meas: string
         A string that specifies which measurement type to use for the figure.
     Results: dictionary
-        The dictionary that contains all of the results. this function uses either Results['Peaks Grouped'] or Results['Bursts Grouped'].
+        The dictionary that contains all of the results. this function uses either Results['Peaks-Master'] or Results['Bursts-Master'].
     Returns
     -------
     none
@@ -1734,9 +1739,11 @@ def average_measurement_plot(event_type, meas, Results):
     """
     
     if event_type.lower() == 'peaks':
-        measurement = Results['Peaks Grouped'][meas]
+        peak_grouped = Results['Peaks-Master'].groupby(level=0)
+        measurement = peak_grouped[meas]
     elif event_type.lower() == 'bursts':
-        measurement = Results['Bursts Grouped'][meas]
+        burst_grouped = Results['Bursts-Master'].groupby(level=0)
+        measurement = burst_grouped[meas]
     else:
         raise ValueError('Not an acceptable event type measurement.\n Must be "Peaks" or "Bursts" ')
     
