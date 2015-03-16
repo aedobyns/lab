@@ -22,106 +22,6 @@ from pandas.tools.plotting import autocorrelation_plot
 #Upload
 #Data and Settings. 
 #
-
-###
-#
-#LCPro Load Block
-###
-
-def load_RAAIM(Data, Settings, Results):
-    '''
-    this function takes a path to where all of the LC_pro saved files are. There should be 3 files:
-    'ROI normailed.text' - the ROI intensity time series data. Units should be in time (not frame) and relative intensity
-    'Parameter List_edit.txt' - this is the events' information file. Duplicate ROIs are expected (since an ROI can have multipule events). The orignal LC_pro file can be loaded, as long as the name is changed to match. 
-    'rbg.png' - A still of the video, must be .png. If it is a .tif, it will load, but it will be pseudo colored. it can be just a frame or some averaged measures.
-    
-    if the files are not named properly or the path is wrong, it will throw a file not found error.
-    '''
-    data = pd.read_csv(r'%s/ROI normalized.txt' %(Settings['folder']), index_col= 'time(s)', sep='\t') #load the intensity time series for each roi. should be a text file named exactly 'ROI normalized.txt'
-    print "Loaded 'ROI normalized.txt'"
-    
-    roi_param = pd.read_csv(r'%s/Parameter List .txt' %(Settings['folder']), index_col='ROI', sep='\t')#load the parameter list.
-    print "Loaded 'Parameter List_edit.txt'"
-    
-    im = Image.open(r'%s/rgb.png' %(Settings['folder'])) #MUST BE RGB and .png. seriously, I'm not kidding.
-    print "Loaded 'rgb.png'"
-    
-    del data['Unnamed: 0'] #lc_pro outputs a weird blank column named this everytime. I don't know why, but it does. this line deletes it safely.
-    roi_loc, roi_x, roi_y, data = lcpro_param_parse(roi_param, data , original=True) #use the parameter list to get the x and y location for each ROI
-    print "Configured Data"
-    
-    #events_x, events_y = get_events(data = data, roi_param = roi_param) #use the parameter list to get the location and amplitude of each event for every ROI
-    #print "LCPro events extracted"
-    
-    Settings['plots folder'] = Settings['Output Folder'] +"/plots"
-    mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
-    print "Made plots folder"
-    
-    Data['original'] = data
-    Data['ROI locations'] = roi_loc
-    Data['ROI parameters'] = roi_param
-    Data['Image'] = im
-    
-    return Data, Settings, Results
-    
-def lcpro_param_parse(roi_param, data , original = True):
-    '''
-    This function takes the Dataframe created by opening the 'Parameter List.txt' from LC_Pro.
-    It returns the location data as both a concise list datafram of only locations (roi_loc), an x and y list (roi_x, roi_y). 
-    It also changes the names in the roi_loc file to be the same as they are in the data dataframe, which is 
-    '''
-    roi_loc = roi_param[['X', 'Y']] #make a new dataframe that contains only the x and y coordinates
-    roi_loc.drop_duplicates(inplace= True) #roi_param has duplicate keys (rois) because the parameters are based on events, which lc_pro detects. a single roi can have many events. doing it in place like this does cause an error, but don't let it both you none.
-    roi_x = roi_loc['X'].tolist() #extract the x column as an array and store it as a value. this is handy for later calculations
-    roi_y = roi_loc['Y'].tolist() #extract the y column as an array and store it as a value. this is handy for later calculations
-    new_index = [] #make an empty temp list
-    for i in np.arange(len(roi_loc.index)): #for each index in roi_loc
-        new_index.append('Roi'+str(roi_loc.index[i])) #make a string from the index name in the same format as the data
-    roi_loc = DataFrame({'x':roi_x, 'y':roi_y}, index= new_index) #reassign roi_loc to a dataframe with the properly named index. this means that we can use the same roi name to call from either the data or location dataframes
-    
-    if len(data.columns) != len(new_index) and original == True: #if the number of roi's are the same AND we are using the original file (no roi's have been romved from the edited roi_param)
-        sys.exit("The number of ROIs in the data file is not equal to the number of ROIs in the parameter file. That doesn't seem right, so I quit the function for you. Make sure you are loading the correct files, please.")
-    
-    if original == False: #if it is not the original, then use the roi_loc index to filter only edited roi's.
-        data = data[roi_loc.index]
-    
-    truth = (data.columns == roi_loc.index).tolist() #a list of the bool for if the roi indexes are all the same.
-    
-    if truth.count(True) != len(data.columns): #all should be true, so check that the number of true are the same.
-        sys.exit("The names on data and roi_loc are not identical. This will surely break everything later, so I shut down the program. Try loading these files again.")
-    
-    return roi_loc, roi_x, roi_y, data
-
-def get_events(data, roi_param):
-    '''
-    extract the events from the roi_parameter list. It returns them as a pair of dictionaries (x or y data, sored as floats in a list) that use the roi name as the key. 
-    duplicate events are ok and expected.
-    '''
-    
-    new_index = [] #create a new, empty list
-    
-    for i in np.arange(len(roi_param.index)): #for each index in the original roi_param list, will include duplicates
-        new_index.append('Roi'+str(roi_param.index[i])) #reformat name and append it to the empty index list
-    roi_events = DataFrame(index= new_index) #make an empty data frame using the new_index as the index
-    roi_events_time = roi_param['Time(s)'].tolist() #convert time (which is the x val) to a list
-    roi_events_amp = roi_param['Amp(F/F0)'].tolist() #conver amplitude (which is the y val) to a list
-    roi_events['Time'] = roi_events_time #store it in the events dataframe
-    roi_events['Peak Amp'] = roi_events_amp #store is in the events dataframe
-    
-    events_x = {} #empty dict
-    events_y = {} #empty dict
-    
-    for label in data.columns: #for each roi name in data, initalize the dict by making an empty list for each roi (key) 
-        events_x[label] = []
-        events_y[label] = []
-
-    for i in np.arange(len(roi_events.index)): #for each event
-        key = roi_events.index[i] #get the roi name
-        events_x[key].append(roi_events.iloc[i,0]) #use the name to add the event's time data point to the dict
-        events_y[key].append(roi_events.iloc[i,1]) #use the name to add the event's amplitude data point to the dict
-        
-    return events_x, events_y #return the two dictionaries
-
 def load_wrapper(Data, Settings):
     """
     Wrapper that chooses the correct script to load in data files.
@@ -256,6 +156,106 @@ def load_wrapper(Data, Settings):
     else:
         raise ValueError('Not an acceptable file type')
     return Data, Settings
+###
+#
+#LCPro Load Block
+###
+
+def load_RAAIM(Data, Settings, Results):
+    '''
+    this function takes a path to where all of the LC_pro saved files are. There should be 3 files:
+    'ROI normailed.text' - the ROI intensity time series data. Units should be in time (not frame) and relative intensity
+    'Parameter List_edit.txt' - this is the events' information file. Duplicate ROIs are expected (since an ROI can have multipule events). The orignal LC_pro file can be loaded, as long as the name is changed to match. 
+    'rbg.png' - A still of the video, must be .png. If it is a .tif, it will load, but it will be pseudo colored. it can be just a frame or some averaged measures.
+    
+    if the files are not named properly or the path is wrong, it will throw a file not found error.
+    '''
+    data = pd.read_csv(r'%s/ROI normalized.txt' %(Settings['folder']), index_col= 'time(s)', sep='\t') #load the intensity time series for each roi. should be a text file named exactly 'ROI normalized.txt'
+    print "Loaded 'ROI normalized.txt'"
+    
+    roi_param = pd.read_csv(r'%s/Parameter List .txt' %(Settings['folder']), index_col='ROI', sep='\t')#load the parameter list.
+    print "Loaded 'Parameter List_edit.txt'"
+    
+    im = Image.open(r'%s/rgb.png' %(Settings['folder'])) #MUST BE RGB and .png. seriously, I'm not kidding.
+    print "Loaded 'rgb.png'"
+    
+    del data['Unnamed: 0'] #lc_pro outputs a weird blank column named this everytime. I don't know why, but it does. this line deletes it safely.
+    roi_loc, roi_x, roi_y, data = lcpro_param_parse(roi_param, data , original=True) #use the parameter list to get the x and y location for each ROI
+    print "Configured Data"
+    
+    #events_x, events_y = get_events(data = data, roi_param = roi_param) #use the parameter list to get the location and amplitude of each event for every ROI
+    #print "LCPro events extracted"
+    
+    Settings['plots folder'] = Settings['Output Folder'] +"/plots"
+    mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
+    print "Made plots folder"
+    
+    Data['original'] = data
+    Data['ROI locations'] = roi_loc
+    Data['ROI parameters'] = roi_param
+    Data['Image'] = im
+    
+    return Data, Settings, Results
+    
+def lcpro_param_parse(roi_param, data , original = True):
+    '''
+    This function takes the Dataframe created by opening the 'Parameter List.txt' from LC_Pro.
+    It returns the location data as both a concise list datafram of only locations (roi_loc), an x and y list (roi_x, roi_y). 
+    It also changes the names in the roi_loc file to be the same as they are in the data dataframe, which is 
+    '''
+    roi_loc = roi_param[['X', 'Y']] #make a new dataframe that contains only the x and y coordinates
+    roi_loc.drop_duplicates(inplace= True) #roi_param has duplicate keys (rois) because the parameters are based on events, which lc_pro detects. a single roi can have many events. doing it in place like this does cause an error, but don't let it both you none.
+    roi_x = roi_loc['X'].tolist() #extract the x column as an array and store it as a value. this is handy for later calculations
+    roi_y = roi_loc['Y'].tolist() #extract the y column as an array and store it as a value. this is handy for later calculations
+    new_index = [] #make an empty temp list
+    for i in np.arange(len(roi_loc.index)): #for each index in roi_loc
+        new_index.append('Roi'+str(roi_loc.index[i])) #make a string from the index name in the same format as the data
+    roi_loc = DataFrame({'x':roi_x, 'y':roi_y}, index= new_index) #reassign roi_loc to a dataframe with the properly named index. this means that we can use the same roi name to call from either the data or location dataframes
+    
+    if len(data.columns) != len(new_index) and original == True: #if the number of roi's are the same AND we are using the original file (no roi's have been romved from the edited roi_param)
+        sys.exit("The number of ROIs in the data file is not equal to the number of ROIs in the parameter file. That doesn't seem right, so I quit the function for you. Make sure you are loading the correct files, please.")
+    
+    if original == False: #if it is not the original, then use the roi_loc index to filter only edited roi's.
+        data = data[roi_loc.index]
+    
+    truth = (data.columns == roi_loc.index).tolist() #a list of the bool for if the roi indexes are all the same.
+    
+    if truth.count(True) != len(data.columns): #all should be true, so check that the number of true are the same.
+        sys.exit("The names on data and roi_loc are not identical. This will surely break everything later, so I shut down the program. Try loading these files again.")
+    
+    return roi_loc, roi_x, roi_y, data
+
+def get_events(data, roi_param):
+    '''
+    extract the events from the roi_parameter list. It returns them as a pair of dictionaries (x or y data, sored as floats in a list) that use the roi name as the key. 
+    duplicate events are ok and expected.
+    '''
+    
+    new_index = [] #create a new, empty list
+    
+    for i in np.arange(len(roi_param.index)): #for each index in the original roi_param list, will include duplicates
+        new_index.append('Roi'+str(roi_param.index[i])) #reformat name and append it to the empty index list
+    roi_events = DataFrame(index= new_index) #make an empty data frame using the new_index as the index
+    roi_events_time = roi_param['Time(s)'].tolist() #convert time (which is the x val) to a list
+    roi_events_amp = roi_param['Amp(F/F0)'].tolist() #conver amplitude (which is the y val) to a list
+    roi_events['Time'] = roi_events_time #store it in the events dataframe
+    roi_events['Peak Amp'] = roi_events_amp #store is in the events dataframe
+    
+    events_x = {} #empty dict
+    events_y = {} #empty dict
+    
+    for label in data.columns: #for each roi name in data, initalize the dict by making an empty list for each roi (key) 
+        events_x[label] = []
+        events_y[label] = []
+
+    for i in np.arange(len(roi_events.index)): #for each event
+        key = roi_events.index[i] #get the roi name
+        events_x[key].append(roi_events.iloc[i,0]) #use the name to add the event's time data point to the dict
+        events_y[key].append(roi_events.iloc[i,1]) #use the name to add the event's amplitude data point to the dict
+        
+    return events_x, events_y #return the two dictionaries
+
+
 
 def mkdir_p(path):
     '''
@@ -331,7 +331,7 @@ def display_settings(Settings):
     return Settings_copy
 
 def load_results(location, event_type, Results):
-        """
+    """
     Loads in a previous master results file.
     Parameters
     ----------
@@ -1518,10 +1518,12 @@ def Save_Results(Settings, Results):
     Results['Peaks Summary'].to_csv(r'%s/%s/%s_peak_results_summary.csv'%(path, folder, folder))
     
     Settings_panda = DataFrame.from_dict(Settings, orient='index')
-    colname = 'Settings: ' + str(datetime.datetime.now())
+    now = datetime.datetime.now()
+    colname = 'Settings: ' + str(now)
     Settings_panda.columns = [colname]
     Settings_panda = Settings_panda.sort()
-    Settings_panda.to_csv(r'%s/%s/%s_%s.csv'%(path, folder, folder,colname))
+    Settings_panda.to_csv(r'%s/%s/%s_%s.csv'%(path, folder, 
+        folder,now.strftime('%Y_%m_%d__%H_%M_%S')))
     
     print "All results saved to", path+'/'+folder
     print "Thank you for chosing SWAN for all your basic analysis needs. Proceed for graphs and advanced analysis."
@@ -2403,19 +2405,11 @@ def analyze(Data, Settings, Results):
                 keys are the column names from the Data DataFrames. objects are DataFrames that contain information about each peak detected, indexed by peak time.
             Peaks-Master: DataFrame
                 multi-indexed DataFrame, created by concatenating all Peaks DataFrames. Column names and peak time are the two indexes. Automatically saved in the Settings['output folder'] location.
-            Peaks Grouped: pandas DataFrame GroupedBy object
-                a single object that contains all peak data GroupedBy time series name/key.
-            Peaks-Master Summary: DataFrame
-                multi-indexed DataFrame, created by used pd.describe() to generate summary statistcs about all peak information, segregated by time series name/key. statistcs generated are: count, mean, standard deviation, minimum, maximum, quartiles. Automatically saved in the Settings['output folder'] location.
             Bursts: dictionary
                 keys are the column names from the Data DataFrames. objects are DataFrames that contain information about each burst detected. has an arbitrary index, which can be roughly thought of as burst number.
             Bursts-Master: DataFrame
                 multi-indexed DataFrame, created by concatenating all Bursts DataFrames. Column names and burst number are the two indexes. Automatically saved in the Settings['output folder'] location.
-            Bursts Grouped: pandas DataFrame GroupedBy object
-                a single object that contains all burst data GroupedBy time series name/key.
-            Bursts-Master Summary: DataFrame
-                multi-indexed DataFrame, created by used pd.describe() to generate summary statistcs about all burst information, segregated by time series name/key. statistcs generated are: count, mean, standard deviation, minimum, maximum, quartiles. Automatically saved in the Settings['output folder'] location.
-
+            
 
     Notes
     -----
@@ -2469,11 +2463,13 @@ def analyze(Data, Settings, Results):
 
     #save settings
     Settings_panda = DataFrame.from_dict(Settings, orient='index')
-    colname = 'Settings: ' + str(datetime.datetime.now())
+    now = datetime.datetime.now()
+    colname = 'Settings: ' + str(now)
     Settings_panda.columns = [colname]
     Settings_panda = Settings_panda.sort()
     Settings_panda.to_csv(r"%s/%s_Settings_%s.csv"%(Settings['Output Folder'], 
-                                                 Settings['Label'], colname))
+                                                 Settings['Label'], 
+                                                 now.strftime('%Y_%m_%d__%H_%M_%S')))
 
     end = t.clock()
     run_time = end-start
