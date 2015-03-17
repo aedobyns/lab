@@ -2141,6 +2141,7 @@ def histent(data_list):
     NumBin = int(2 * (log(len(data_list), 2)))
     binarray = np.linspace(min(data_list), max(data_list), NumBin)
     no, xo = np.histogram(data_list, binarray); #print no
+    no = no.astype(np.float) #or else they are all ints, which do stupid things when being divided
 
     # normalize the distribution to make area under distribution function unity
     no = no/sum(no); #print no
@@ -2230,18 +2231,19 @@ def histent_wrapper(event_type, meas, Data, Settings, Results):
             
             try:
                 HistEntropy, binarray = histent(temp_list)
+                temp_histent[key] = HistEntropy
             except:
                 HistEntropy = NaN
                 binarray = []
-            temp_histent[key] = HistEntropy
+                temp_histent[key] = HistEntropy
             
             try:
                 plt.figure(1)
                 plt.hist(temp_list,binarray)
                 plt.xlabel('%s' %meas)
                 plt.ylabel('Count')
-                plt.title(r'%s Histogram - %s' %(meas,key))
-                plt.savefig(r'%s/%s Histogram - %s.pdf'%(Settings['plots folder'], meas, key))
+                plt.title(r'%s-%s Histogram - %s' %(event_type, meas,key))
+                plt.savefig(r'%s/%s-%s Histogram - %s.pdf'%(Settings['plots folder'], event_type,meas, key))
                 plt.close()
             except:
                 pass
