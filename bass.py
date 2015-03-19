@@ -1896,7 +1896,6 @@ def raster(Results):
     plt.title('Raster plot')
     plt.show()
     
-
 #
 #Event Frequency plots
 #
@@ -2493,9 +2492,9 @@ def analyze(Data, Settings, Results):
     print "-----"
     for label, col in Results['Bursts-Master'].iteritems():
         print label
-    
-    print 'Event Detection Complete!'
-    
+    print "\n---------------------------"
+    print '|Event Detection Complete!|'
+    print "---------------------------"
     return Data, Settings, Results
 
 
