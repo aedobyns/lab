@@ -180,11 +180,9 @@ def load_RAAIM(Data, Settings, Results):
     print "Loaded 'rgb.png'"
     
     del data['Unnamed: 0'] #lc_pro outputs a weird blank column named this everytime. I don't know why, but it does. this line deletes it safely.
+    
     roi_loc, roi_x, roi_y, data = lcpro_param_parse(roi_param, data , original=True) #use the parameter list to get the x and y location for each ROI
     print "Configured Data"
-    
-    #events_x, events_y = get_events(data = data, roi_param = roi_param) #use the parameter list to get the location and amplitude of each event for every ROI
-    #print "LCPro events extracted"
     
     Settings['plots folder'] = Settings['Output Folder'] +"/plots"
     mkdir_p(Settings['plots folder']) #makes a plots folder inside the path where the data was loaded from
@@ -255,8 +253,6 @@ def get_events(data, roi_param):
         
     return events_x, events_y #return the two dictionaries
 
-
-
 def mkdir_p(path):
     '''
     This function creates a folder at the end of the specified path, unless the folder already exsists. 
@@ -266,8 +262,7 @@ def mkdir_p(path):
     except OSError as exc: # Python >2.5
         if exc.errno == errno.EEXIST and os.path.isdir(path):
             pass
-        else: raise
-            
+        else: raise           
 
 def string_eval(string):
     try:
@@ -371,7 +366,6 @@ def load_results(location, event_type, Results):
     except:
         raise OSError('Could not load Results. :(')
     
-
 #
 #Transform
 #wrappers and functions
@@ -460,11 +454,11 @@ def butter_bandpass(lowcut, highcut, fs, order=5):
     b, a = butter(order, [low, high], btype='band')
     return b, a
 
-
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = lfilter(b, a, data)
     return y
+
 def user_input_trans(settings):
     '''
     this function allows the user to specify and save their settings for later 
@@ -532,6 +526,7 @@ def savgolay_settings():
         print " "
         savgolay_settings()
     '''
+    
 def bandpass_settings():
     print "Enter the butterworth bandpass settings seperated by a comma. cuts are in hertz and poly should be an interger."
     
@@ -2392,7 +2387,7 @@ def analyze(Data, Settings, Results):
     Settings: dictionary
         dictionary that contains the user's settings.
     Results: dictionary
-        an empty dictionary named Data.
+        an empty dictionary named Results.
     
     Returns
     -------
@@ -2492,6 +2487,7 @@ def analyze(Data, Settings, Results):
     print "-----"
     for label, col in Results['Bursts-Master'].iteritems():
         print label
+    
     print "\n---------------------------"
     print '|Event Detection Complete!|'
     print "---------------------------"
